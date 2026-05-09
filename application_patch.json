@@ -1,0 +1,92 @@
+{
+  "name": "pickup",
+  "description": "This is the configuration for Pickup application.",
+  "imageUrl": "https://example.com/logo/my-logo.png",
+  "accessUrl": "https://example.com/login",
+  "logoutReturnUrl": "https://example.com/app/logout",
+  "claimConfiguration": {
+    "dialect": "LOCAL",
+    "claimMappings": [
+      {
+        "applicationClaim": "firstname",
+        "localClaim": {
+          "uri": "http://wso2.org/claims/username"
+        }
+      }
+    ],
+    "requestedClaims": [
+      {
+        "claim": {
+          "uri": "http://wso2.org/claims/username"
+        },
+        "mandatory": false
+      }
+    ],
+    "subject": {
+      "claim": {
+        "uri": "http://wso2.org/claims/username"
+      },
+      "includeUserDomain": false,
+      "includeTenantDomain": false,
+      "useMappedLocalSubject": false
+    },
+    "role": {
+      "mappings": [
+        {
+          "localRole": "admin",
+          "applicationRole": "Administrator"
+        }
+      ],
+      "includeUserDomain": true,
+      "claim": {
+        "uri": "http://wso2.org/claims/username"
+      }
+    }
+  },
+  "authenticationSequence": {
+    "type": "DEFAULT",
+    "steps": [
+      {
+        "id": 1,
+        "options": [
+          {
+            "idp": "LOCAL",
+            "authenticator": "basic"
+          }
+        ]
+      }
+    ],
+    "requestPathAuthenticators": [
+      "string"
+    ],
+    "script": "string",
+    "subjectStepId": 1,
+    "attributeStepId": 1
+  },
+  "advancedConfigurations": {
+    "saas": false,
+    "discoverableByEndUsers": false,
+    "certificate": {
+      "type": "JWKS",
+      "value": "string"
+    },
+    "skipConsent": false,
+    "returnAuthenticatedIdpList": false,
+    "enableAuthorization": true
+  },
+  "provisioningConfigurations": {
+    "inboundProvisioning": {
+      "proxyMode": false,
+      "provisioningUserstoreDomain": "PRIMARY"
+    },
+    "outboundProvisioningIdps": [
+      {
+        "idp": "Google",
+        "connector": "googleapps",
+        "blocking": false,
+        "rules": false,
+        "jit": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+apiVersion: wso2.it.auth.gr/v1alpha1
+kind: WSO2ISInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: wso2is-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: wso2isinstance-sample
+spec:
+  # TODO(user): Add fields here

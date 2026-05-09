@@ -1,0 +1,73 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - wso2.it.auth.gr
+  resources:
+  - wso2isinstances
+  - wso2sps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - wso2.it.auth.gr
+  resources:
+  - wso2isinstances/finalizers
+  - wso2sps/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - wso2.it.auth.gr
+  resources:
+  - wso2isinstances/status
+  - wso2sps/status
+  verbs:
+  - get
+  - patch
+  - update

@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- wso2_v1alpha1_wso2isinstance.yaml
+- wso2_v1alpha1_wso2sp.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
