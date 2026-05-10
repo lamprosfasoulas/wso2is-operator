@@ -15,7 +15,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.instanceRef
+    - jsonPath: .spec.instanceRef.name
       name: Instance
       type: string
     - jsonPath: .spec.name
@@ -159,6 +159,15 @@ spec:
                 required:
                 - callbackURL
                 - grantTypes
+                type: object
+              saml:
+                properties:
+                  enableAttributeProfile:
+                    type: boolean
+                  includeAttributesByDefault:
+                    type: boolean
+                  metadataURL:
+                    type: string
                 type: object
               skipConsent:
                 type: boolean

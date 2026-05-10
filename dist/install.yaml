@@ -185,7 +185,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.instanceRef
+    - jsonPath: .spec.instanceRef.name
       name: Instance
       type: string
     - jsonPath: .spec.name
@@ -224,6 +224,8 @@ spec:
           spec:
             description: spec defines the desired state of WSO2SP
             properties:
+              alwaysSendBackAuthenticatedListOfIDPs:
+                type: boolean
               authenticationScript:
                 description: ConfigMap ref that defines Adaptive Authentication Script
                 properties:
@@ -269,6 +271,8 @@ spec:
                 type: array
               description:
                 type: string
+              enableAuthorization:
+                type: boolean
               instanceRef:
                 description: Name of a WSO2ISInstance CR in the same namespace
                 properties:
@@ -290,7 +294,12 @@ spec:
                 properties:
                   accessTokenExpiry:
                     default: 3600
+                    description: time in seconds
                     type: integer
+                  audiences:
+                    items:
+                      type: string
+                    type: array
                   callbackURL:
                     type: string
                   grantTypes:
@@ -302,14 +311,38 @@ spec:
                     type: boolean
                   pkcePlain:
                     type: boolean
+                  publicClient:
+                    type: boolean
                   refreshTokenExpiry:
                     default: 3600
                     description: time in seconds
                     type: integer
+                  scopeValidators:
+                    items:
+                      type: string
+                    type: array
+                  tokenBinding:
+                    enum:
+                    - session
+                    - cookie
+                    type: string
                 required:
                 - callbackURL
                 - grantTypes
                 type: object
+              saml:
+                properties:
+                  enableAttributeProfile:
+                    type: boolean
+                  includeAttributesByDefault:
+                    type: boolean
+                  metadataURL:
+                    type: string
+                type: object
+              skipConsent:
+                type: boolean
+              skipLogoutConsent:
+                type: boolean
               stepForAttr:
                 default: 1
                 type: integer
@@ -318,8 +351,16 @@ spec:
                 type: integer
               subjectURI:
                 type: string
+              useTenantInSub:
+                description: Use Tenant domain in local subject identifier
+                type: boolean
+              useUserstoreInRoles:
+                type: boolean
+              useUserstoreInSub:
+                default: true
+                description: Use User store domain in local subject identifier
+                type: boolean
             required:
-            - claims
             - instanceRef
             - name
             - subjectURI
@@ -811,7 +852,7 @@ spec:
         - --metrics-bind-address=:8443
         command:
         - /manager
-        image: ghcr.io/lamprosfasoulas/wso2is-operator/manager:staging
+        image: ghcr.io/lamprosfasoulas/wso2is-operator:v0.1.0
         livenessProbe:
           httpGet:
             path: /healthz
@@ -819,7 +860,13 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports: []
+        ports:
+        - containerPort: 8443
+          name: metrics
+          protocol: TCP
+        - containerPort: 8081
+          name: healthz
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz

@@ -17,13 +17,25 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-const ReconcileAnnotation = "wso2.it.auth.gr/reconcile"
+type Component string
 
-func skipReconcile(sp *wso2v1alpha1.WSO2SP) bool {
+const (
+	APP   Component = "app"
+	SAML  Component = "saml"
+	OAuth Component = "oauth"
+)
+
+var ReconcileAnnotation = map[Component]string{
+	APP:   "wso2.it.auth.gr/reconcile",
+	SAML:  "wso2.it.auth.gr/reconcile-saml",
+	OAuth: "wso2.it.auth.gr/reconcile-oauth",
+}
+
+func skipReconcile(c Component, sp *wso2v1alpha1.WSO2SP) bool {
 	if sp.Annotations == nil {
 		return false
 	}
-	return sp.Annotations[ReconcileAnnotation] == "false"
+	return sp.Annotations[ReconcileAnnotation[c]] == "false"
 }
 
 func (r *WSO2SPReconciler) buildClient(ctx context.Context, sp *wso2v1alpha1.WSO2SP) (*wso2.Client, error) {
@@ -33,12 +45,12 @@ func (r *WSO2SPReconciler) buildClient(ctx context.Context, sp *wso2v1alpha1.WSO
 		Namespace: sp.Namespace,
 	}, instance); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, fmt.Errorf("WSO2ISInstance %q not found", sp.Spec.InstanceRef)
+			return nil, fmt.Errorf("WSO2ISInstance %q not found", sp.Spec.InstanceRef.Name)
 		}
 		return nil, err
 	}
 	if instance.Status.Phase != "Ready" {
-		return nil, fmt.Errorf("WSO2ISInstance %q is not ready: %s", sp.Spec.InstanceRef, instance.Status.Message)
+		return nil, fmt.Errorf("WSO2ISInstance %q is not ready: %s", sp.Spec.InstanceRef.Name, instance.Status.Message)
 	}
 
 	secretNS := instance.Spec.CredentialsSecret.Namespace
@@ -144,6 +156,12 @@ func applicationFromSpec(sp *wso2v1alpha1.WSO2SP) wso2.Application {
 
 		StepForSubject:    sp.Spec.StepForSubject,
 		StepForAttributes: sp.Spec.StepForAttributes,
+		OAuth2: &wso2.OAuth2Config{
+			Enabled: sp.Spec.OAuth2 != nil,
+		},
+		SAML: &wso2.SAMLConfig{
+			Enabled: sp.Spec.SAML != nil,
+		},
 	}
 }
 
@@ -180,6 +198,26 @@ func oauth2HasChanged(existing, desired *wso2.OAuth2Config) bool {
 	eHash := hash(existing)
 	dHash := hash(desired)
 	// return existing.Description != desired.Description
+	return eHash != dHash
+}
+
+func samlSPHasChanged(existing, desired *wso2.SAMLConfig) bool {
+	// fmt.Println("Existin::SAML::", existing)
+	// fmt.Println("Desired::SAML::", desired)
+	eHash := hash(map[string]any{
+		"issuer":   existing.Issuer,
+		"acsurls":  existing.ACSURLs,
+		"attr":     existing.EnableAttributeProfile,
+		"attr_def": existing.EnableAttributesByDefault,
+	})
+	dHash := hash(map[string]any{
+		"issuer":   desired.Issuer,
+		"acsurls":  desired.ACSURLs,
+		"attr":     desired.EnableAttributeProfile,
+		"attr_def": desired.EnableAttributesByDefault,
+	})
+	// fmt.Println("Existin::SAML::hash::", eHash)
+	// fmt.Println("Desired::SAML::hash::", dHash)
 	return eHash != dHash
 }
 

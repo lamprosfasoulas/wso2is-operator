@@ -9,6 +9,7 @@ const (
 	AxisNS    = "http://org.apache.axis2/xsd"
 	CommonNS  = "http://model.common.application.identity.carbon.wso2.org/xsd"
 	OAuthNS   = "http://dto.oauth.identity.carbon.wso2.org/xsd"
+	samlNS    = "http://dto.saml.sso.identity.carbon.wso2.org/xsd"
 )
 
 // ── ENVELOPES ────────────────────────────────────────────────────────────────
@@ -347,4 +348,150 @@ type OAuthApplicationResponse struct {
 	TokenType                        string           `xml:"http://dto.oauth.identity.carbon.wso2.org/xsd tokenType"`
 	UserAccessTokenExpiryTime        int64            `xml:"http://dto.oauth.identity.carbon.wso2.org/xsd userAccessTokenExpiryTime"`
 	Username                         string           `xml:"http://dto.oauth.identity.carbon.wso2.org/xsd username"`
+}
+
+// ── SAML — SOAP BODIES ───────────────────────────────────────────────────────
+
+type CreateSAMLApplicationBody struct {
+	CreateSAMLApplicationRequest CreateSAMLApplicationRequest `xml:"xsd:addRPServiceProvider"`
+}
+
+type CreateSAMLApplicationRequest struct {
+	SpDto SAMLSSOServiceProviderDTORequest `xml:"xsd:spDto"`
+}
+
+type UpdateSAMLSPBody struct {
+	UpdateRPServiceProvider UpdateRPServiceProviderRequest `xml:"xsd:updateRPServiceProvider"`
+}
+
+type UpdateRPServiceProviderRequest struct {
+	SpDto SAMLSSOServiceProviderDTORequest `xml:"xsd:spDto"`
+}
+
+type GetServiceProviderBody struct {
+	GetServiceProvider GetServiceProviderRequest `xml:"xsd:getServiceProvider"`
+}
+
+type GetServiceProviderRequest struct {
+	Issuer string `xml:"xsd:issuer"`
+}
+
+type RemoveSAMLSPBody struct {
+	RemoveServiceProvider RemoveServiceProviderRequest `xml:"xsd:removeServiceProvider"`
+}
+
+type RemoveServiceProviderRequest struct {
+	Issuer string `xml:"xsd:issuer"`
+}
+
+// ── SAML - REQUEST (marshal) ─────────────────────────────────────────────────
+
+type SAMLSSOServiceProviderDTORequest struct {
+	// Repeated elements
+	AssertionConsumerUrls  []string `xml:"xsd1:assertionConsumerUrls"`
+	RequestedAudiences     []string `xml:"xsd1:requestedAudiences,omitempty"`
+	RequestedRecipients    []string `xml:"xsd1:requestedRecipients,omitempty"`
+	IdpInitSLOReturnToURLs []string `xml:"xsd1:idpInitSLOReturnToURLs,omitempty"`
+
+	// Core identity fields
+	Issuer                      string `xml:"xsd1:issuer"`
+	IssuerQualifier             string `xml:"xsd1:issuerQualifier,omitempty"`
+	DefaultAssertionConsumerURL string `xml:"xsd1:defaultAssertionConsumerUrl"`
+	NameIDFormat                string `xml:"xsd1:nameIDFormat,omitempty"`
+	NameIdClaimUri              string `xml:"xsd1:nameIdClaimUri,omitempty"`
+	CertAlias                   string `xml:"xsd1:certAlias,omitempty"`
+	CertificateContent          string `xml:"xsd1:certificateContent,omitempty"`
+	LoginPageURL                string `xml:"xsd1:loginPageURL,omitempty"`
+	IdpEntityIDAlias            string `xml:"xsd1:idpEntityIDAlias,omitempty"`
+
+	// Algorithm URIs
+	SigningAlgorithmURI             string `xml:"xsd1:signingAlgorithmURI,omitempty"`
+	DigestAlgorithmURI              string `xml:"xsd1:digestAlgorithmURI,omitempty"`
+	AssertionEncryptionAlgorithmURI string `xml:"xsd1:assertionEncryptionAlgorithmURI,omitempty"`
+	KeyEncryptionAlgorithmURI       string `xml:"xsd1:keyEncryptionAlgorithmURI,omitempty"`
+
+	// SLO
+	SloRequestURL             string `xml:"xsd1:sloRequestURL,omitempty"`
+	SloResponseURL            string `xml:"xsd1:sloResponseURL,omitempty"`
+	FrontChannelLogoutBinding string `xml:"xsd1:frontChannelLogoutBinding,omitempty"`
+
+	// Attribute profile
+	AttributeConsumingServiceIndex      string `xml:"xsd1:attributeConsumingServiceIndex,omitempty"`
+	SupportedAssertionQueryRequestTypes string `xml:"xsd1:supportedAssertionQueryRequestTypes,omitempty"`
+
+	// Boolean flags
+	DoSignAssertions                     bool `xml:"xsd1:doSignAssertions"`
+	DoSignResponse                       bool `xml:"xsd1:doSignResponse"`
+	DoSingleLogout                       bool `xml:"xsd1:doSingleLogout"`
+	DoFrontChannelLogout                 bool `xml:"xsd1:doFrontChannelLogout"`
+	DoEnableEncryptedAssertion           bool `xml:"xsd1:doEnableEncryptedAssertion"`
+	DoValidateSignatureInRequests        bool `xml:"xsd1:doValidateSignatureInRequests"`
+	DoValidateSignatureInArtifactResolve bool `xml:"xsd1:doValidateSignatureInArtifactResolve"`
+	EnableAttributeProfile               bool `xml:"xsd1:enableAttributeProfile"`
+	EnableAttributesByDefault            bool `xml:"xsd1:enableAttributesByDefault"`
+	EnableSAML2ArtifactBinding           bool `xml:"xsd1:enableSAML2ArtifactBinding"`
+	AssertionQueryRequestProfileEnabled  bool `xml:"xsd1:assertionQueryRequestProfileEnabled"`
+	IDPInitSSOEnabled                    bool `xml:"xsd1:idPInitSSOEnabled"`
+	IDPInitSLOEnabled                    bool `xml:"xsd1:idPInitSLOEnabled"`
+	SamlECP                              bool `xml:"xsd1:samlECP"`
+}
+
+// ── SAML - RESPONSE (unmarshal) ─────────────────────────────────────────────────
+
+type SAMLSSOServiceProviderDTOResponse struct {
+	// Repeated elements
+	AssertionConsumerUrls  []string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd assertionConsumerUrls"`
+	RequestedAudiences     []string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd requestedAudiences,omitempty"`
+	RequestedRecipients    []string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd requestedRecipients,omitempty"`
+	IdpInitSLOReturnToURLs []string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd idpInitSLOReturnToURLs,omitempty"`
+
+	// Core identity fields
+	Issuer                      string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd issuer"`
+	IssuerQualifier             string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd issuerQualifier,omitempty"`
+	DefaultAssertionConsumerURL string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd defaultAssertionConsumerUrl"`
+	NameIDFormat                string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd nameIDFormat,omitempty"`
+	NameIDClaimURI              string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd nameIdClaimUri,omitempty"`
+	CertAlias                   string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd certAlias,omitempty"`
+	CertificateContent          string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd certificateContent,omitempty"`
+	LoginPageURL                string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd loginPageURL,omitempty"`
+	IdpEntityIDAlias            string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd idpEntityIDAlias,omitempty"`
+
+	// Algorithm URIs
+	SigningAlgorithmURI             string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd signingAlgorithmURI,omitempty"`
+	DigestAlgorithmURI              string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd digestAlgorithmURI,omitempty"`
+	AssertionEncryptionAlgorithmURI string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd assertionEncryptionAlgorithmURI,omitempty"`
+	KeyEncryptionAlgorithmURI       string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd keyEncryptionAlgorithmURI,omitempty"`
+
+	// SLO
+	SloRequestURL             string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd sloRequestURL,omitempty"`
+	SloResponseURL            string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd sloResponseURL,omitempty"`
+	FrontChannelLogoutBinding string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd frontChannelLogoutBinding,omitempty"`
+
+	// Attribute profile
+	AttributeConsumingServiceIndex      string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd attributeConsumingServiceIndex,omitempty"`
+	SupportedAssertionQueryRequestTypes string `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd supportedAssertionQueryRequestTypes,omitempty"`
+
+	// Boolean flags
+	DoSignAssertions                     bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doSignAssertions"`
+	DoSignResponse                       bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doSignResponse"`
+	DoSingleLogout                       bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doSingleLogout"`
+	DoFrontChannelLogout                 bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doFrontChannelLogout"`
+	DoEnableEncryptedAssertion           bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doEnableEncryptedAssertion"`
+	DoValidateSignatureInRequests        bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doValidateSignatureInRequests"`
+	DoValidateSignatureInArtifactResolve bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd doValidateSignatureInArtifactResolve"`
+	EnableAttributeProfile               bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd enableAttributeProfile"`
+	EnableAttributesByDefault            bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd enableAttributesByDefault"`
+	EnableSAML2ArtifactBinding           bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd enableSAML2ArtifactBinding"`
+	AssertionQueryRequestProfileEnabled  bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd assertionQueryRequestProfileEnabled"`
+	IDPInitSSOEnabled                    bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd idPInitSSOEnabled"`
+	IDPInitSLOEnabled                    bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd idPInitSLOEnabled"`
+	SamlECP                              bool `xml:"http://dto.saml.sso.identity.carbon.wso2.org/xsd samlECP"`
+}
+
+type GetSAMLSPResponseBody struct {
+	Response GetSAMLSPResponse `xml:"http://org.apache.axis2/xsd getServiceProviderResponse,omitempty"`
+}
+
+type GetSAMLSPResponse struct {
+	Return *SAMLSSOServiceProviderDTOResponse `xml:"http://org.apache.axis2/xsd return,omitempty"`
 }

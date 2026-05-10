@@ -9,7 +9,48 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+)
+
+type ContentType string
+type SOAPAction string
+type SOAPEndpoint string
+
+type Client struct {
+	BaseURL    string
+	Username   string
+	Password   string
+	Tenant     string
+	httpClient *http.Client
+}
+
+type Response struct {
+	Body       []byte
+	StatusCode int
+	Location   string
+}
+
+type RequestOptions struct {
+	ContentType ContentType
+	Accept      string
+	SOAPAction  SOAPAction
+}
+
+const (
+	ContentTypeJSON ContentType = "application/json"
+	ContentTypeSOAP ContentType = "text/xml; charset=utf-8"
+
+	applicationEndpoint SOAPEndpoint = "/services/IdentityApplicationManagementService?wsdl"
+	oAuthEndpoint       SOAPEndpoint = "/services/OAuthAdminService?wsdl"
+	samlEndpoint        SOAPEndpoint = "/services/IdentitySAMLSSOConfigService?wsdl"
+
+	getApplication        SOAPAction = "urn:getApplication"
+	createApplication     SOAPAction = "urn:createApplication"
+	deleteApplication     SOAPAction = "urn:deleteApplication"
+	updateApplication     SOAPAction = "urn:updateApplication"
+	getOAuthApplication   SOAPAction = "urn:getOAuthApplicationDataByAppName"
+	getSAMLApplication    SOAPAction = "urn:getServiceProvider"
+	createSAMLApplication SOAPAction = "urn:addRPServiceProvider"
+	removeSAMLApplication SOAPAction = "urn:removeServiceProvider"
 )
 
 func NewClient(baseURL, username, password, tenant string, skipTLS bool) *Client {
@@ -25,13 +66,13 @@ func NewClient(baseURL, username, password, tenant string, skipTLS bool) *Client
 	}
 }
 
-func JSONRequest() RequestOptions {
+func jsonRequest() RequestOptions {
 	return RequestOptions{
 		ContentType: ContentTypeJSON,
 		Accept:      "application/json",
 	}
 }
-func SOAPRequest(action string) RequestOptions {
+func soapRequest(action SOAPAction) RequestOptions {
 	return RequestOptions{
 		ContentType: ContentTypeSOAP,
 		Accept:      "text/xml",
@@ -83,7 +124,7 @@ func (c *Client) newRequest(method, path string, body any, opts RequestOptions) 
 	}
 
 	if opts.SOAPAction != "" {
-		req.Header.Set("SOAPAction", opts.SOAPAction)
+		req.Header.Set("SOAPAction", string(opts.SOAPAction))
 	}
 
 	return req, nil
@@ -113,7 +154,7 @@ func (c *Client) doRequest(method, path string, body any, opts RequestOptions) (
 }
 
 func (c *Client) doJSON(method, path string, reqBody, respBody any) (*Response, error) {
-	resp, err := c.doRequest(method, path, reqBody, JSONRequest())
+	resp, err := c.doRequest(method, path, reqBody, jsonRequest())
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +176,8 @@ func (c *Client) doJSON(method, path string, reqBody, respBody any) (*Response, 
 	return resp, nil
 }
 
-func (c *Client) doSOAP(action, path string, reqBody, respBody any) (*Response, error) {
-	resp, err := c.doRequest(http.MethodPost, path, reqBody, SOAPRequest(action))
+func (c *Client) doSOAP(action SOAPAction, path SOAPEndpoint, reqBody, respBody any) (*Response, error) {
+	resp, err := c.doRequest(http.MethodPost, string(path), reqBody, soapRequest(action))
 	if err != nil {
 		return nil, err
 	}
@@ -174,70 +215,94 @@ func (c *Client) Ping() error {
 	return nil
 }
 
-func (c *Client) GetApplicationOAuth2Config(resID, name string) (*OAuth2Config, error) {
-	env := RequestEnvelope[GetOAuthBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		Body: GetOAuthBody{
-			GetOAuthApplicationDataByAppName: GetOAuthApplicationDataByAppNameRequest{
-				AppName: name,
-			},
-		},
+func (c *Client) getUserInfo(name string) (string, string, error) {
+	path := fmt.Sprintf("/t/%s/scim2/Users/.search", c.Tenant)
+	request := buildUserSearch(name)
+	var response SCIMListResponse[SCIMUser]
+	_, err := c.doJSON("POST", path, request, &response)
+	if err != nil {
+		return "", "", fmt.Errorf("scim user search failed: %w", err)
 	}
+	if len(response.Resources) == 0 {
+		return "", "", fmt.Errorf("failed to decode scim response: %w", err)
+	}
+	return response.Resources[0].Username, response.Resources[0].ID, nil
+}
 
-	var data ResponseEnvelope[GetOAuthApplicationDataByAppNameResponseBody]
-	resp, err := c.doSOAP("urn:getOAuthApplicationDataByAppName", "/services/OAuthAdminService?wsdl", env, &data)
+func (c *Client) joinUserToGroup(userName, groupID string) error {
+	path := fmt.Sprintf("/t/%s/scim2/Groups/%s", c.Tenant, groupID)
+	username, userID, err := c.getUserInfo(userName)
+	if err != nil {
+		return fmt.Errorf("failed to decode scim response: %w", err)
+	}
+	if username == "" || userID == "" {
+		return fmt.Errorf("failed to find admin user: %w", err)
+	}
+	request := buildJoinUserToGroup(username, userID)
+	_, err = c.doJSON("PATCH", path, request, nil)
+	if err != nil {
+		return fmt.Errorf("scim group patch failed: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) JoinAdminToGroup(groupID string) error {
+	return c.joinUserToGroup("admin", groupID)
+}
+
+func getUserGroupMembership(userName string, group *SCIMGroup) bool {
+	for _, m := range group.Members {
+		if m.Display == userName {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) getGroupInfo(groupName string) (*SCIMGroup, error) {
+	path := fmt.Sprintf("/t/%s/scim2/Groups/.search", c.Tenant)
+
+	request := buildGroupSearch(groupName)
+	var response SCIMListResponse[SCIMGroup]
+	_, err := c.doJSON("POST", path, request, &response)
+	if err != nil {
+		return nil, fmt.Errorf("scim group search failed: %w", err)
+	}
+	if len(response.Resources) == 0 || len(response.Resources) > 1 {
+		return nil, fmt.Errorf("scim group search failed: ")
+	}
+	return &response.Resources[0], nil
+}
+
+func (c *Client) GetAdminGroupMembership(groupName string) (bool, string, error) {
+	groupInfo, err := c.getGroupInfo(groupName)
+	if err != nil {
+		return false, "", err
+	}
+	if groupInfo == nil {
+		return false, "", fmt.Errorf("group %s does not exist", groupName)
+	}
+	adminJoined := getUserGroupMembership("admin", groupInfo)
+	return adminJoined, (*groupInfo).ID, nil
+}
+
+func (c *Client) GetApplicationOAuth2Config(resID, name string) (*OAuth2Config, error) {
+	request := buildGetOAuthApplication(name)
+
+	var response ResponseEnvelope[GetOAuthApplicationDataByAppNameResponseBody]
+	resp, err := c.doSOAP(getOAuthApplication, oAuthEndpoint, request, &response)
 	if resp.StatusCode == http.StatusInternalServerError {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	oauth2Cfg := data.Body.GetOAuthApplicationDataByAppNameResponse.OAuthApplication
-	// fmt.Println("Got::OAUTH2::", oauth2Cfg.CallbackURL)
-	return &OAuth2Config{
-		CallbackURL:         oauth2Cfg.CallbackURL,
-		GrantTypes:          strings.Split(oauth2Cfg.GrantTypes, " "),
-		PKCEMandatory:       oauth2Cfg.PKCEMandatory,
-		PKCEPlain:           oauth2Cfg.PKCESupportPlain,
-		PublicClient:        oauth2Cfg.BypassClientCredentials,
-		TokenBinding:        mapTokenBinding(oauth2Cfg.TokenBindingType),
-		Audiences:           oauth2Cfg.Audiences,
-		ScopeValidators:     mapScopeValidators(oauth2Cfg.ScopeValidators),
-		AccessTokenExpiry:   int(oauth2Cfg.UserAccessTokenExpiryTime),
-		RefreshTokenExpiry:  int(oauth2Cfg.RefreshTokenExpiryTime),
-		OAuthConsumerKey:    oauth2Cfg.OAuthConsumerKey,
-		OAuthConsumerSecret: oauth2Cfg.OAuthConsumerSecret,
-	}, nil
+	return mapGetOAuthApplication(&response)
 }
 
 func (c *Client) CreateApplicationOAuth2Config(name string, cfg *OAuth2Config) error {
-	env := RequestEnvelope[RegisterOAuthBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		XSD1:    CommonNS,
-		Body: RegisterOAuthBody{
-			RegisterOAuthApplicationData: RegisterOAuthApplicationDataRequest{
-				Application: OAuthApplication{
-					OAuthVersion:                     "OAuth-2.0",
-					ApplicationAccessTokenExpiryTime: int64(cfg.AccessTokenExpiry),
-					ApplicationName:                  name,
-					CallbackURL:                      cfg.CallbackURL,
-					GrantTypes:                       strings.Join(cfg.GrantTypes, " "),
-					PKCEMandatory:                    cfg.PKCEMandatory,
-					PKCESupportPlain:                 cfg.PKCEPlain,
-					Audiences:                        cfg.Audiences,
-					ScopeValidators:                  buildScopeValidators(cfg.ScopeValidators),
-					TokenBindingType:                 buildTokenBindingType(cfg.TokenBinding),
-					RefreshTokenExpiryTime:           int64(cfg.RefreshTokenExpiry),
-					UserAccessTokenExpiryTime:        int64(cfg.AccessTokenExpiry),
-					OAuthConsumerKey:                 cfg.OAuthConsumerKey,
-					OAuthConsumerSecret:              cfg.OAuthConsumerSecret,
-				},
-			},
-		},
-	}
-	_, err := c.doSOAP("urn:updateApplication", "/services/OAuthAdminService?wsdl", env, nil)
+	request := buildCreateOAuthApplicaiton(name, cfg)
+	_, err := c.doSOAP(updateApplication, oAuthEndpoint, request, nil)
 	if err != nil {
 		return err
 	}
@@ -245,32 +310,49 @@ func (c *Client) CreateApplicationOAuth2Config(name string, cfg *OAuth2Config) e
 }
 
 func (c *Client) UpdateApplicationOAuth2Config(name string, cfg *OAuth2Config) error {
-	env := RequestEnvelope[UpdateOAuthBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		XSD1:    CommonNS,
-		Body: UpdateOAuthBody{
-			UpdateConsumerApplication: UpdateConsumerApplicationRequest{
-				ConsumerAppDTO: OAuthApplication{
-					OAuthVersion:                     "OAuth-2.0",
-					ApplicationAccessTokenExpiryTime: int64(cfg.AccessTokenExpiry),
-					ApplicationName:                  name,
-					CallbackURL:                      cfg.CallbackURL,
-					GrantTypes:                       strings.Join(cfg.GrantTypes, " "),
-					PKCEMandatory:                    cfg.PKCEMandatory,
-					PKCESupportPlain:                 cfg.PKCEPlain,
-					Audiences:                        cfg.Audiences,
-					ScopeValidators:                  buildScopeValidators(cfg.ScopeValidators),
-					TokenBindingType:                 buildTokenBindingType(cfg.TokenBinding),
-					RefreshTokenExpiryTime:           int64(cfg.RefreshTokenExpiry),
-					UserAccessTokenExpiryTime:        int64(cfg.AccessTokenExpiry),
-					OAuthConsumerKey:                 cfg.OAuthConsumerKey,
-					OAuthConsumerSecret:              cfg.OAuthConsumerSecret,
-				},
-			},
-		},
+	request := buildUpdateOAuthApplication(name, cfg)
+	_, err := c.doSOAP(updateApplication, oAuthEndpoint, request, nil)
+	if err != nil {
+		return err
 	}
-	_, err := c.doSOAP("urn:updateApplication", "/services/OAuthAdminService?wsdl", env, nil)
+	return nil
+}
+
+func (c *Client) GetApplicationSAMLConfig(issuer string) (*SAMLConfig, error) {
+	request := buildGetSAMLApplication(issuer)
+	var response ResponseEnvelope[GetSAMLSPResponseBody]
+	_, err := c.doSOAP(getSAMLApplication, samlEndpoint, request, &response)
+	if err != nil {
+		return nil, err
+	}
+	if response.Body.Response.Return == nil {
+		return nil, nil
+	}
+	return mapSAMLApplication(&response)
+}
+
+func (c *Client) CreateSAMLApplication(cfg *SAMLConfig) error {
+	request := buildCreateSAMLApplication(cfg)
+	_, err := c.doSOAP(createSAMLApplication, samlEndpoint, request, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) UpdateSAMLApplication(cfg *SAMLConfig) error {
+	if err := c.DeleteApplication(cfg.Issuer); err != nil {
+		return err
+	}
+	if err := c.CreateSAMLApplication(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) RemoveSAMLApplication(issuer string) error {
+	request := buildRemoveSAMLAPplication(issuer)
+	_, err := c.doSOAP(removeSAMLApplication, samlEndpoint, request, nil)
 	if err != nil {
 		return err
 	}
@@ -289,66 +371,21 @@ func (c *Client) GetApplicationByName(name string) (*Application, error) {
 		return nil, nil
 	}
 
-	env := RequestEnvelope[GetApplicationBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		Body: GetApplicationBody{
-			GetApplication: GetApplicationRequest{
-				ApplicationName: name,
-			},
-		},
-	}
+	request := buildGetApplication(name)
 	// fmt.Println("GET::ENV::", env)
-	var respEnv ResponseEnvelope[GetApplicationResponseBody]
-	_, err = c.doSOAP(http.MethodPost, "/services/IdentityApplicationManagementService?wsdl", env, &respEnv)
+	var response ResponseEnvelope[GetApplicationResponseBody]
+	_, err = c.doSOAP(getApplication, applicationEndpoint, request, &response)
 	if err != nil {
 		// fmt.Println("error here", err)
 		return nil, err
 	}
-
-	sp := respEnv.Body.GetApplicationResponse.ServiceProvider
-	lab := sp.LocalAndOutboundAuthenticationConfig
-
-	steps, sub, attr := mapAuthenticationSteps(sp.LocalAndOutboundAuthenticationConfig.AuthenticationSteps)
-
-	return &Application{
-		ID:                   sp.ApplicationID,
-		ResourceID:           sp.ApplicationResourceID,
-		Name:                 sp.ApplicationName,
-		Description:          sp.Description,
-		Claims:               mapClaims(sp.ClaimConfig.ClaimMappings),
-		SubjectClaimURI:      lab.SubjectClaimURI,
-		AuthenticationSteps:  steps,
-		AuthenticationScript: lab.AuthenticationScriptConfig.Content,
-
-		EnableAuthorization: lab.EnableAuthorization,
-		SkipConsent:         lab.SkipConsent,
-		SkipLogoutConsent:   lab.SkipLogoutConsent,
-		UseTenantInSub:      lab.UseTenantDomainInLocalSubjectIdentifier,
-		UseUserstoreInSub:   lab.UseUserstoreDomainInLocalSubjectIdentifier,
-		UseUserstoreInRoles: lab.UseUserstoreDomainInRoles,
-
-		StepForSubject:    sub,
-		StepForAttributes: attr,
-	}, nil
+	return mapGetApplication(&response)
 }
 
-func (c *Client) CreateApplication(sp Application) (*Application, error) {
-	env := RequestEnvelope[CreateApplicationBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		XSD1:    CommonNS,
-		Body: CreateApplicationBody{
-			CreateApplication: CreateApplicationRequest{
-				ServiceProvider: ServiceProviderRequest{
-					ApplicationName: sp.Name,
-					Description:     sp.Description,
-				},
-			},
-		},
-	}
+func (c *Client) CreateApplication(a Application) (*Application, error) {
+	request := buildCreateApplication(&a)
 	//var data Envelope[GetApplicationResponse]
-	_, err := c.doSOAP("urn:createApplication", "/services/IdentityApplicationManagementService?wsdl", env, nil)
+	_, err := c.doSOAP(createApplication, applicationEndpoint, request, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -356,32 +393,9 @@ func (c *Client) CreateApplication(sp Application) (*Application, error) {
 	return &Application{}, nil
 }
 
-func (c *Client) UpdateApplication(sp Application) error {
-	env := RequestEnvelope[UpdateApplicationBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		XSD1:    CommonNS,
-		Body: UpdateApplicationBody{
-			UpdateApplication: UpdateApplicationRequest{
-				ServiceProvider: ServiceProviderRequest{
-					ApplicationID:   sp.ID,
-					ApplicationName: sp.Name,
-					Description:     sp.Description,
-					ClaimConfig: &ClaimConfigRequest{
-						AlwaysSendMappedLocalSubjectID: "true",
-						LocalClaimDialect:              true,
-						ClaimMappings:                  buildClaimConfig(sp.Claims),
-						UserClaimURI:                   sp.SubjectClaimURI,
-					},
-					InboundAuthenticationConfig: &InboundAuthenticationConfigRequest{
-						InboundAuthenticationRequestConfigs: buildInboundAuthConfig(&sp),
-					},
-					LocalAndOutboundAuthenticationConfig: buildLocalAndOutboundConfig(&sp),
-				},
-			},
-		},
-	}
-	_, err := c.doSOAP("urn:updateApplication", "/services/IdentityApplicationManagementService?wsdl", env, nil)
+func (c *Client) UpdateApplication(a Application) error {
+	request := buildUpdateApplication(&a)
+	_, err := c.doSOAP(updateApplication, applicationEndpoint, request, nil)
 	if err != nil {
 		return err
 	}
@@ -389,110 +403,10 @@ func (c *Client) UpdateApplication(sp Application) error {
 }
 
 func (c *Client) DeleteApplication(spName string) error {
-	env := RequestEnvelope[DeleteApplicationBody]{
-		SoapEnv: SoapEnvNS,
-		XSD:     AxisNS,
-		XSD1:    CommonNS,
-		Body: DeleteApplicationBody{
-			DeleteApplication: DeleteApplicationRequest{
-				ApplicationName: spName,
-			},
-		},
-	}
-	_, err := c.doSOAP("urn:deleteApplication", "/services/IdentityApplicationManagementService?wsdl", env, nil)
+	request := buildDeleteApplication(spName)
+	_, err := c.doSOAP(deleteApplication, applicationEndpoint, request, nil)
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func (c *Client) GetAdminInfo() (string, string, error) {
-	searchJSON := SCIMUserSearch{
-		Schemas: []string{
-			"urn:ietf:params:scim:api:messages:2.0:SearchRequest",
-		},
-		Attributes: []string{
-			"userName",
-		},
-		Domain:     "PRIMARY",
-		Filter:     "userName eq admin",
-		StartIndex: 1,
-		Count:      10,
-	}
-	var data SCIMListResponse[SCIMUser]
-	path := fmt.Sprintf("/t/%s/scim2/Users/.search", c.Tenant)
-	_, err := c.doJSON("POST", path, searchJSON, &data)
-	if err != nil {
-		return "", "", fmt.Errorf("scim user search failed: %w", err)
-	}
-	if len(data.Resources) == 0 {
-		return "", "", fmt.Errorf("failed to decode scim response: %w", err)
-	}
-	return data.Resources[0].Username, data.Resources[0].ID, nil
-}
-
-func (c *Client) SetAdminGroupMembership(groupID string) error {
-	userName, userID, err := c.GetAdminInfo()
-	if err != nil {
-		return fmt.Errorf("failed to decode scim response: %w", err)
-	}
-	if userName == "" || userID == "" {
-		return fmt.Errorf("failed to find admin user: %w", err)
-	}
-	patchJSON := SCIMGroupPatch{
-		Schemas: []string{
-			"urn:ietf:params:scim:api:messages:2.0:PatchOp",
-		},
-		Operations: []SCIMPatchOperation{
-			{
-				Op: "add",
-				Value: SCIMPatchMembers{
-					Members: []SCIMPatchMember{
-						{
-							Display: userName,
-							Value:   userID,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	path := fmt.Sprintf("/t/%s/scim2/Groups/%s", c.Tenant, groupID)
-	_, err = c.doJSON("PATCH", path, patchJSON, nil)
-	if err != nil {
-		return fmt.Errorf("scim group patch failed: %w", err)
-	}
-	return nil
-}
-
-func (c *Client) GetAdminGroupMembership(group string) (bool, string, error) {
-	searchJSON := SCIMGroupSearch{
-		Schemas: []string{
-			"urn:ietf:params:scim:api:messages:2.0:SearchRequest",
-		},
-		StartIndex: 1,
-		Filter:     fmt.Sprintf("displayName eq %s", group),
-	}
-	var groupID string
-
-	var data SCIMListResponse[SCIMGroup]
-
-	path := fmt.Sprintf("/t/%s/scim2/Groups/.search", c.Tenant)
-	_, err := c.doJSON("POST", path, searchJSON, &data)
-	if err != nil {
-		return false, "", fmt.Errorf("scim group search failed: %w", err)
-	}
-	for _, v := range data.Resources {
-		groupID = v.ID
-		for _, m := range v.Members {
-			if m.Display == "admin" {
-				return true, groupID, nil
-			}
-		}
-	}
-	if groupID == "" {
-		return false, "", fmt.Errorf("group not found")
-	}
-	return false, groupID, nil
 }

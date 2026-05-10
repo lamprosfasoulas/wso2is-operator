@@ -21,9 +21,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 type Claim struct {
 	URI string `json:"uri"`
 	// +optional
@@ -51,6 +48,11 @@ type OAuth2Config struct {
 	// time in seconds
 	// +kubebuilder:default:=3600
 	AccessTokenExpiry int `json:"accessTokenExpiry,omitempty"`
+}
+type SAMLConfig struct {
+	MetadataURL                string `json:"metadataURL,omitempty"`
+	EnableAttributeProfile     bool   `json:"enableAttributeProfile,omitempty"`
+	IncludeAttributesByDefault bool   `json:"includeAttributesByDefault,omitempty"`
 }
 
 type AuthenticationStep struct {
@@ -80,6 +82,9 @@ type WSO2SPSpec struct {
 
 	//+kubebuilder:validation:Required
 	SubjectClaimURI string `json:"subjectURI"`
+
+	// +optional
+	SAML *SAMLConfig `json:"saml,omitempty"`
 
 	// +optional
 	OAuth2              *OAuth2Config        `json:"oauth2,omitempty"`
@@ -149,7 +154,7 @@ type WSO2SPStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Instance",type=string,JSONPath=`.spec.instanceRef`
+// +kubebuilder:printcolumn:name="Instance",type=string,JSONPath=`.spec.instanceRef.name`
 // +kubebuilder:printcolumn:name="Name",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="AdminCanView",type=string,JSONPath=`.status.adminCanView`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
