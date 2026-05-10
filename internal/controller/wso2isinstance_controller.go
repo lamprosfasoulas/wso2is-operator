@@ -27,20 +27,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wso2v1alpha1 "github.com/lamprosfasoulas/wso2is-operator/api/v1alpha1"
 	"github.com/lamprosfasoulas/wso2is-operator/internal/wso2"
+	"k8s.io/client-go/tools/events"
 )
 
 // WSO2ISInstanceReconciler reconciles a WSO2ISInstance object
 type WSO2ISInstanceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=wso2.it.auth.gr,resources=wso2isinstances,verbs=get;list;watch;create;update;patch;delete
@@ -70,7 +70,8 @@ func (r *WSO2ISInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		Namespace: secretNS,
 		Name:      instance.Spec.CredentialsSecret.Name,
 	}, secret); err != nil {
-		r.Recorder.Eventf(instance, corev1.EventTypeWarning, "SecretMissing",
+		// SecretMissing
+		r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, "SecretMissing", "Reconciling",
 			"Cannot read credentials secret %q: %v", instance.Spec.CredentialsSecret.Name, err)
 		return r.setPhase(ctx, instance, "Failed", fmt.Sprintf("cannot read secret %q: %v",
 			instance.Spec.CredentialsSecret.Name, err), 2*time.Minute)
@@ -79,7 +80,8 @@ func (r *WSO2ISInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	username := string(secret.Data["username"])
 	password := string(secret.Data["password"])
 	if username == "" || password == "" {
-		r.Recorder.Event(instance, corev1.EventTypeWarning, "InvalidSecret",
+		// InvalidSecret  (was Event, not Eventf)
+		r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, "InvalidSecret", "Reconciling",
 			"Secret must contain 'username' and 'password' keys")
 		return r.setPhase(ctx, instance, "Failed", "secret missing 'username' or 'password' keys", 2*time.Minute)
 	}
@@ -98,7 +100,10 @@ func (r *WSO2ISInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	)
 	if err := wso2Client.Ping(); err != nil {
 		logger.Error(err, "ping failed")
-		r.Recorder.Eventf(instance, corev1.EventTypeWarning, "PingFailed", "Connection failed: %v", err)
+		// PingFailed
+		r.Recorder.Eventf(instance, nil, corev1.EventTypeWarning, "PingFailed", "Reconciling",
+			"Connection failed: %v", err)
+
 		return r.setPhase(ctx, instance, "Failed", err.Error(), 15*time.Second)
 	}
 
@@ -107,7 +112,7 @@ func (r *WSO2ISInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 	if !wasReady {
-		r.Recorder.Eventf(instance, corev1.EventTypeNormal, "Connected",
+		r.Recorder.Eventf(instance, nil, corev1.EventTypeNormal, "Connected", "Reconciling",
 			"Successfully connected to %s", instance.Spec.BaseURL)
 	}
 

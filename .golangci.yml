@@ -13,6 +13,7 @@ linters:
     - govet
     - ineffassign
     - lll
+    - loggercheck
     - modernize
     - misspell
     - nakedret
@@ -22,12 +23,11 @@ linters:
     - unconvert
     - unparam
     - unused
-    - logcheck
   settings:
-    custom:
-      logcheck:
-        type: "module"
-        description: Checks Go logging calls for Kubernetes logging conventions.
+    loggercheck:
+      logr: true
+      require-string-key: true
+      no-printf-like: true
     revive:
       rules:
         - name: comment-spacings

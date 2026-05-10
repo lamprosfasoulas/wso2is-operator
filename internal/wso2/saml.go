@@ -316,7 +316,9 @@ func fetchAndParse(ctx context.Context, url string) (*EntityDescriptor, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("metadata endpoint returned %s", resp.Status)
@@ -371,13 +373,9 @@ func collectACSURLs(services []AssertionConsumerService) (urls []string, default
 
 // parseSLOEndpoints extracts SLO configuration from a list of endpoints.
 // Returns: doSingleLogout, doFrontChannel, frontChannelBinding, requestURL, responseURL.
-func parseSLOEndpoints(endpoints []SLOEndpoint) (
-	doSingleLogout bool,
-	doFrontChannel bool,
-	frontChannelBinding string,
-	requestURL string,
-	responseURL string,
-) {
+func parseSLOEndpoints(endpoints []SLOEndpoint) (bool, bool, string, string, string) {
+	var doSingleLogout, doFrontChannel bool
+	var frontChannelBinding, requestURL, responseURL string
 	if len(endpoints) == 0 {
 		return false, false, "", "", ""
 	}
@@ -405,7 +403,7 @@ func parseSLOEndpoints(endpoints []SLOEndpoint) (
 			}
 		}
 	}
-	return
+	return doSingleLogout, doFrontChannel, frontChannelBinding, requestURL, responseURL
 }
 
 // deriveAlias produces a short human-readable cert alias.

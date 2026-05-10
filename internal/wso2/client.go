@@ -140,7 +140,10 @@ func (c *Client) doRequest(method, path string, body any, opts RequestOptions) (
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -384,7 +387,6 @@ func (c *Client) GetApplicationByName(name string) (*Application, error) {
 
 func (c *Client) CreateApplication(a Application) (*Application, error) {
 	request := buildCreateApplication(&a)
-	//var data Envelope[GetApplicationResponse]
 	_, err := c.doSOAP(createApplication, applicationEndpoint, request, nil)
 	if err != nil {
 		return nil, err

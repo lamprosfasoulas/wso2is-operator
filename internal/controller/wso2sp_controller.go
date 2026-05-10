@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +27,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,6 +34,7 @@ import (
 
 	wso2v1alpha1 "github.com/lamprosfasoulas/wso2is-operator/api/v1alpha1"
 	"github.com/lamprosfasoulas/wso2is-operator/internal/wso2"
+	"k8s.io/client-go/tools/events"
 )
 
 const (
@@ -48,7 +49,7 @@ const (
 type WSO2SPReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 }
 
 // -- Core Logic --------------------------------------------------------------
@@ -60,7 +61,7 @@ func (r *WSO2SPReconciler) reconcileAdminAccess(ctx context.Context, sp *wso2v1a
 	}
 	canAdminView, groupID, err := wso2Client.GetAdminGroupMembership(sp.Spec.Name)
 	if err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "GetFailed",
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "GetFailed", "Reconciling",
 			"Failed to query WSO2 admin group membership: %v", err)
 		return r.setPhase(ctx, sp, PhaseFailed,
 			fmt.Sprintf("admin group lookup failed: %v", err),
@@ -80,7 +81,7 @@ func (r *WSO2SPReconciler) reconcileAdminAccess(ctx context.Context, sp *wso2v1a
 
 	logger.Info("granting admin group visibility", "groupID", groupID)
 	if err := wso2Client.JoinAdminToGroup(groupID); err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "SetFailed",
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "SetFailed", "UpdatingAdminGroup",
 			"Failed to update WSO2 admin group membership: %v", err)
 		return r.setPhase(ctx, sp, PhaseFailed,
 			fmt.Sprintf("admin group update failed: %v", err),
@@ -125,12 +126,12 @@ func (r *WSO2SPReconciler) upsertApplicationSecret(ctx context.Context, sp *wso2
 	} else if err != nil {
 		return err
 	}
+
 	if sec.StringData == nil {
 		sec.StringData = map[string]string{}
 	}
-	for k, v := range kv {
-		sec.StringData[k] = v
-	}
+	maps.Copy(sec.StringData, kv)
+
 	return r.Update(ctx, sec)
 }
 
@@ -184,14 +185,16 @@ func (r *WSO2SPReconciler) reconcileApplicationOAuth2(ctx context.Context, sp *w
 
 	existing, err := wso2Client.GetApplicationOAuth2Config(sp.Status.ResourceID, sp.Spec.Name)
 	if err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "GetOAuth2Failed", "Failed to query WSO2IS for OAuth2: %v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "GetOAuth2Failed", "Reconciling",
+			"Failed to query WSO2IS for OAuth2: %v", err)
 		return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 	}
 	// Create secret
 	if existing == nil {
 		logger.Info("creating oauth2 application")
 		if err := wso2Client.CreateApplicationOAuth2Config(sp.Spec.Name, desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "CreateOAuth2Failed", "Failed to create app on WSO2IS: %v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "CreateOAuth2Failed", "Creating",
+				"Failed to create app on WSO2IS: %v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 		}
 		return ctrl.Result{
@@ -203,7 +206,8 @@ func (r *WSO2SPReconciler) reconcileApplicationOAuth2(ctx context.Context, sp *w
 		"client_id":     existing.OAuthConsumerKey,
 		"client_secret": existing.OAuthConsumerSecret,
 	}); err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "CreateOAuth2Failed", "Failed to create secret: %v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "CreateOAuth2Failed", "Creating",
+			"Failed to create secret: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -212,11 +216,13 @@ func (r *WSO2SPReconciler) reconcileApplicationOAuth2(ctx context.Context, sp *w
 	if oauth2HasChanged(existing, desired) {
 		logger.Info("updating oauth2 application")
 		if err := wso2Client.UpdateApplicationOAuth2Config(sp.Spec.Name, desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "UpdateOAuth2Failed", "Failed to update app on WSO2IS: %v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "UpdateOAuth2Failed", "Updating",
+				"Failed to update app on WSO2IS: %v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 		}
-		r.Recorder.Eventf(sp, corev1.EventTypeNormal, "OAuth2Updated",
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "OAuth2Updated", "Updating",
 			"OAuth2Application %q updated", sp.Spec.Name)
+
 		return ctrl.Result{
 			RequeueAfter: 5 * time.Second,
 		}, nil
@@ -228,7 +234,7 @@ func (r *WSO2SPReconciler) reconcileSAMLApplication(ctx context.Context, sp *wso
 	logger := log.FromContext(ctx)
 	desired, err := wso2.Fetch(ctx, sp.Spec.SAML.MetadataURL)
 	if err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "SAMLMetadataFailed",
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "SAMLMetadataFailed", "FetchingMetadata",
 			"Failed to fetch SAML metadata from %s: %v", sp.Spec.SAML.MetadataURL, err)
 		return r.setPhase(ctx, sp, PhaseFailed,
 			fmt.Sprintf("saml metadata fetch failed: %v", err), 30*time.Second)
@@ -239,17 +245,19 @@ func (r *WSO2SPReconciler) reconcileSAMLApplication(ctx context.Context, sp *wso
 
 	existing, err := wso2Client.GetApplicationSAMLConfig(desired.Issuer)
 	if err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "GetSAMLFailed", "%v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "GetSAMLFailed", "Reconciling", "%v", err)
+
 		return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 	}
 
 	if existing.Issuer == "" {
 		logger.Info("creating SAML SP", "issuer", desired.Issuer)
 		if err := wso2Client.CreateSAMLApplication(desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "CreateSAMLFailed", "%v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "CreateSAMLFailed", "Creating", "%v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 		}
-		r.Recorder.Eventf(sp, corev1.EventTypeNormal, "SAMLCreated", "SAML SP %q created", desired.Issuer)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "SAMLCreated", "Creating", "SAML SP %q created", desired.Issuer)
+
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
@@ -261,17 +269,17 @@ func (r *WSO2SPReconciler) reconcileSAMLApplication(ctx context.Context, sp *wso
 		"saml_issuer":                    existing.Issuer,
 		"saml_attrConsumingServiceIndex": existing.AttributeConsumingServiceIndex,
 	}); err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "CreateSAMLFailed", "Failed to create secret: %v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "CreateSAMLFailed", "Creating", "Failed to create secret: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	if samlSPHasChanged(existing, desired) {
 		logger.Info("updating SAML SP", "issuer", desired.Issuer)
 		if err := wso2Client.UpdateSAMLApplication(desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "UpdateSAMLFailed", "%v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "UpdateSAMLFailed", "Updating", "%v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 		}
-		r.Recorder.Eventf(sp, corev1.EventTypeNormal, "SAMLUpdated", "SAML SP %q updated", desired.Issuer)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "SAMLUpdated", "Updating", "SAML SP %q updated", desired.Issuer)
 	}
 
 	return ctrl.Result{}, nil
@@ -297,17 +305,20 @@ func (r *WSO2SPReconciler) reconcileApplication(ctx context.Context, sp *wso2v1a
 
 	existing, err := wso2Client.GetApplicationByName(sp.Spec.Name)
 	if err != nil {
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "GetFailed", "Failed to query WSO2IS: %v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "GetFailed", "Reconciling",
+			"Failed to query WSO2IS: %v", err)
 		return r.setPhase(ctx, sp, PhaseFailed, err.Error(), 30*time.Second)
 	}
 
 	if existing == nil {
 		logger.Info("creating application in WSO2IS", "name", sp.Spec.Name)
 		if _, err := wso2Client.CreateApplication(desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "CreateFailed", "Failed to create application: %v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "CreateFailed", "Creating",
+				"Failed to create application: %v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, fmt.Sprintf("create failed: %v", err), 30*time.Second)
 		}
-		r.Recorder.Eventf(sp, corev1.EventTypeNormal, "Created", sp.Spec.Name)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "Created", "Creating",
+			"%s", sp.Spec.Name)
 
 		sp.Status.Phase = PhasePending
 		sp.Status.Message = "Application created, waiting for remote sync"
@@ -351,10 +362,11 @@ func (r *WSO2SPReconciler) reconcileApplication(ctx context.Context, sp *wso2v1a
 
 		logger.Info("updating application in WSO2IS", "name", sp.Spec.Name, "id", existing.ResourceID)
 		if err := wso2Client.UpdateApplication(desired); err != nil {
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "UpdateFailed", "Failed to update application: %v", err)
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "UpdateFailed", "Updating",
+				"Failed to update application: %v", err)
 			return r.setPhase(ctx, sp, PhaseFailed, fmt.Sprintf("update failed: %v", err), 30*time.Second)
 		}
-		r.Recorder.Eventf(sp, corev1.EventTypeNormal, "Updated",
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "Updated", "Updating",
 			"Application %q updated", sp.Spec.Name)
 	}
 
@@ -390,10 +402,10 @@ func (r *WSO2SPReconciler) handleDelete(ctx context.Context, sp *wso2v1alpha1.WS
 			logger.Error(err, "failed to delete application from WSO2IS — may be orphaned",
 				"id", sp.Status.ID,
 			)
-			r.Recorder.Eventf(sp, corev1.EventTypeWarning, "DeleteFailed",
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "DeleteFailed", "Deleting",
 				"Could not delete application from WSO2IS (may be orphaned): %v", err)
 		} else {
-			r.Recorder.Eventf(sp, corev1.EventTypeNormal, "Deleted",
+			r.Recorder.Eventf(sp, nil, corev1.EventTypeNormal, "Deleted", "Deleting",
 				"Application %q deleted from WSO2IS", sp.Spec.Name)
 		}
 	}
@@ -445,7 +457,8 @@ func (r *WSO2SPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	wso2Client, err := r.buildClient(ctx, sp)
 	if err != nil {
 		logger.Info("instance not ready, requeueing", "reason", err.Error())
-		r.Recorder.Eventf(sp, corev1.EventTypeWarning, "InstanceNotReady", "%v", err)
+		r.Recorder.Eventf(sp, nil, corev1.EventTypeWarning, "InstanceNotReady", "Reconciling",
+			"%v", err)
 		return r.setPhase(ctx, sp, PhasePending, err.Error(), 15*time.Second)
 	}
 

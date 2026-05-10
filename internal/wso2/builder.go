@@ -53,7 +53,8 @@ func buildTokenBindingType(in string) (out TokenBindingType) {
 	return
 }
 
-func buildInboundAuthConfig(sp *Application) (configs []InboundAuthenticationRequestConfigRequest) {
+func buildInboundAuthConfig(sp *Application) []InboundAuthenticationRequestConfigRequest {
+	configs := make([]InboundAuthenticationRequestConfigRequest, 0, 4)
 	if sp.OAuth2 != nil {
 		configs = append(configs, InboundAuthenticationRequestConfigRequest{
 			InboundAuthKey:  sp.OAuth2.OAuthConsumerKey,
@@ -88,7 +89,7 @@ func buildInboundAuthConfig(sp *Application) (configs []InboundAuthenticationReq
 		InboundAuthType: "passivests",
 	},
 	)
-	return
+	return configs
 }
 
 func buildLocalAuthenticators(la []string) (locals []LocalAuthenticatorConfigRequest) {
@@ -263,7 +264,7 @@ func buildCreateSAMLApplication(cfg *SAMLConfig) RequestEnvelope[CreateSAMLAppli
 					IssuerQualifier:             cfg.IssuerQualifier,
 					DefaultAssertionConsumerURL: cfg.DefaultAssertionConsumerURL,
 					NameIDFormat:                cfg.NameIDFormat,
-					//NameIDClaimUri:              cfg.NameIDClaimUri,
+					// NameIDClaimUri:              cfg.NameIDClaimUri,
 					CertAlias:          cfg.CertAlias,
 					CertificateContent: cfg.CertificateContent,
 					LoginPageURL:       cfg.LoginPageURL,

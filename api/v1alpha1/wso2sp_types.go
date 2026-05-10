@@ -56,7 +56,7 @@ type SAMLConfig struct {
 }
 
 type AuthenticationStep struct {
-	//+kubebuilder:validation:Required
+	// +kubebuilder:validation:Required
 	Step                   int      `json:"step"`
 	LocalAuthenticators    []string `json:"localAuthenticators,omitempty"`
 	FederatedIDP           string   `json:"federatedIDP,omitempty"`
@@ -66,11 +66,11 @@ type AuthenticationStep struct {
 // WSO2SPSpec defines the desired state of WSO2SP
 type WSO2SPSpec struct {
 	// Name of a WSO2ISInstance CR in the same namespace
-	//+kubebuilder:validation:Required
+	// +kubebuilder:validation:Required
 	InstanceRef *corev1.LocalObjectReference `json:"instanceRef"`
 
 	// The application name in WSO2IS
-	//+kubebuilder:validation:Required
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// Claim Mappings for this SP
@@ -80,7 +80,7 @@ type WSO2SPSpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
-	//+kubebuilder:validation:Required
+	// +kubebuilder:validation:Required
 	SubjectClaimURI string `json:"subjectURI"`
 
 	// +optional

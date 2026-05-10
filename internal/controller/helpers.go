@@ -49,7 +49,7 @@ func (r *WSO2SPReconciler) buildClient(ctx context.Context, sp *wso2v1alpha1.WSO
 		}
 		return nil, err
 	}
-	if instance.Status.Phase != "Ready" {
+	if instance.Status.Phase != PhaseReady {
 		return nil, fmt.Errorf("WSO2ISInstance %q is not ready: %s", sp.Spec.InstanceRef.Name, instance.Status.Message)
 	}
 

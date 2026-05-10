@@ -181,7 +181,7 @@ func main() {
 	if err := (&controller.WSO2ISInstanceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("wso2isinstancereconciler-controller"),
+		Recorder: mgr.GetEventRecorder("wso2isinstancereconciler-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "WSO2ISInstance")
 		os.Exit(1)
@@ -189,7 +189,7 @@ func main() {
 	if err := (&controller.WSO2SPReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("wso2spreconciler-controller"),
+		Recorder: mgr.GetEventRecorder("wso2spreconciler-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "WSO2SP")
 		os.Exit(1)
