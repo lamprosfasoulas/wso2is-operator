@@ -48,6 +48,7 @@ type WSO2ISInstanceReconciler struct {
 // +kubebuilder:rbac:groups=wso2.it.auth.gr,resources=wso2isinstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 func (r *WSO2ISInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := logf.FromContext(ctx)
