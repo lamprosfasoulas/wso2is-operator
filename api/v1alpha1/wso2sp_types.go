@@ -31,10 +31,10 @@ type OAuth2Config struct {
 	CallbackURL string   `json:"callbackURL"`
 	GrantTypes  []string `json:"grantTypes"`
 	// +optional
-	// +kubebuilder:default:=true
 	PKCEMandatory bool `json:"pkceMandatory,omitempty"`
-	PKCEPlain     bool `json:"pkcePlain,omitempty"`
-	PublicClient  bool `json:"publicClient,omitempty"`
+	// +kubebuilder:default:=true
+	PKCEPlain    bool `json:"pkcePlain,omitempty"`
+	PublicClient bool `json:"publicClient,omitempty"`
 	// +optional
 	// +kubebuilder:validation:Enum=session;cookie
 	TokenBinding string `json:"tokenBinding,omitempty"`
@@ -43,7 +43,7 @@ type OAuth2Config struct {
 	// +optional
 	ScopeValidators []string `json:"scopeValidators,omitempty"`
 	// time in seconds
-	// +kubebuilder:default:=3600
+	// +kubebuilder:default:=86400
 	RefreshTokenExpiry int `json:"refreshTokenExpiry,omitempty"`
 	// time in seconds
 	// +kubebuilder:default:=3600
@@ -96,6 +96,7 @@ type WSO2SPSpec struct {
 	// +optional
 	AlwaysSendBackAuthenticatedListOfIDPs bool `json:"alwaysSendBackAuthenticatedListOfIDPs,omitempty"`
 
+	// +optional
 	EnableAuthorization bool `json:"enableAuthorization,omitempty"`
 	// +optional
 	SkipConsent bool `json:"skipConsent,omitempty"`
@@ -105,7 +106,6 @@ type WSO2SPSpec struct {
 	// +optional
 	UseTenantInSub bool `json:"useTenantInSub,omitempty"`
 	// Use User store domain in local subject identifier
-	// +kubebuilder:default=true
 	UseUserstoreInSub bool `json:"useUserstoreInSub,omitempty"`
 	// +optional
 	UseUserstoreInRoles bool `json:"useUserstoreInRoles,omitempty"`

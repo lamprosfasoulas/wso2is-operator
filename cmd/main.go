@@ -178,6 +178,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	for _, obj := range []runtime.Object{
+		&wso2v1alpha1.WSO2ISInstance{},
+		&wso2v1alpha1.WSO2SP{},
+	} {
+		gvks, _, err := scheme.ObjectKinds(obj)
+		if err != nil || len(gvks) == 0 {
+			setupLog.Error(err, "Failed to determine GVK from scheme")
+			os.Exit(1)
+		}
+		gvk := gvks[0]
+		if _, err := mgr.GetRESTMapper().RESTMapping(gvk.GroupKind(), gvk.Version); err != nil {
+			setupLog.Error(err, "Required CRD is not installed; apply CRDs before starting the operator",
+				"group", gvk.Group, "version", gvk.Version, "kind", gvk.Kind)
+			os.Exit(1)
+		}
+		setupLog.Info("CRD found", "group", gvk.Group, "version", gvk.Version, "kind", gvk.Kind)
+	}
+
 	if err := (&controller.WSO2ISInstanceReconciler{
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),

@@ -137,14 +137,14 @@ spec:
                       type: string
                     type: array
                   pkceMandatory:
-                    default: true
                     type: boolean
                   pkcePlain:
+                    default: true
                     type: boolean
                   publicClient:
                     type: boolean
                   refreshTokenExpiry:
-                    default: 3600
+                    default: 86400
                     description: time in seconds
                     type: integer
                   scopeValidators:
@@ -187,7 +187,6 @@ spec:
               useUserstoreInRoles:
                 type: boolean
               useUserstoreInSub:
-                default: true
                 description: Use User store domain in local subject identifier
                 type: boolean
             required:

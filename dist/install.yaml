@@ -307,14 +307,14 @@ spec:
                       type: string
                     type: array
                   pkceMandatory:
-                    default: true
                     type: boolean
                   pkcePlain:
+                    default: true
                     type: boolean
                   publicClient:
                     type: boolean
                   refreshTokenExpiry:
-                    default: 3600
+                    default: 86400
                     description: time in seconds
                     type: integer
                   scopeValidators:
@@ -357,7 +357,6 @@ spec:
               useUserstoreInRoles:
                 type: boolean
               useUserstoreInSub:
-                default: true
                 description: Use User store domain in local subject identifier
                 type: boolean
             required:
@@ -529,13 +528,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
   - secrets
   verbs:
   - create
@@ -544,6 +536,14 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - ""
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 - apiGroups:
   - coordination.k8s.io
   resources:
@@ -852,7 +852,7 @@ spec:
         - --metrics-bind-address=:8443
         command:
         - /manager
-        image: ghcr.io/lamprosfasoulas/wso2is-operator:v0.1.0
+        image: ghcr.io/lamprosfasoulas/wso2is-operator/manager:v0.1.0
         livenessProbe:
           httpGet:
             path: /healthz

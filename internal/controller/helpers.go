@@ -141,7 +141,7 @@ func applicationFromSpec(sp *wso2v1alpha1.WSO2SP) wso2.Application {
 		ID:                  sp.Status.ID,
 		ResourceID:          sp.Status.ResourceID,
 		Name:                sp.Spec.Name,
-		Description:         sp.Spec.Description,
+		Description:         fmt.Sprintf("%s -- %s", sp.Spec.Name, sp.Spec.Description),
 		Claims:              mapClaims(sp.Spec.Claims),
 		SubjectClaimURI:     sp.Spec.SubjectClaimURI,
 		AuthenticationSteps: authenticationStepsFromSpec(sp),
